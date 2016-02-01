@@ -13,7 +13,8 @@
              ((t) #t)
              ((f) #f)))
           ((char=? c #\")
-           (read-string))
+           (read-char)
+           (list->string (read-string)))
           ((char=? c #\')
            (read-char)
            `(quote ,(read)))
@@ -43,6 +44,16 @@
         (begin
           (read-char)
           (cons c (read-symbol))))))
+
+(define (read-string)
+  (let ((c (peek-char)))
+    (cond ((eof-object? c) (error "Invalid syntax: non-terminated string"))
+          ((char=? c #\") (begin (read-char) '()))
+          ((char=? c #\\) (begin (read-char) (cons (read-char) (read-string))))
+          (else (begin
+                  (read-char)
+                  (cons c (read-string)))))))
+
 
 (define (peek-char-non-whitespace)
   (let ((c (peek-char)))
