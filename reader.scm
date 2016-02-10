@@ -23,6 +23,7 @@
     (cond ((eof-object? c)
            c)
           ((char=? #\. c) (error "Syntax error: wrong context for dot"))
+          ((char=? #\; c) (begin (read-line) (read)))
           (readermacro (begin (read-char) (readermacro c)))
           ((char=? c #\()
            (read-char) ;; skip "("
@@ -49,6 +50,12 @@
            (let ((s (list->string (cons c (read-symbol)))))
              (or (string->number s)
                  (string->symbol s)))))))
+
+(define (read-line)
+  (let ((c (peek-char)))
+    (if (char=? c #\newline)
+        (begin (read-char) '())
+        (cons (read-char) (read-line)))))
 
 (define (read-list)
   (let ((c (peek-char-non-whitespace)))
@@ -118,8 +125,13 @@
               ((string=? str "tab") #\tab)))))
                 
 (define (read-literal-char)
-  (let ((fst (read-char)))
-    (if (char-whitespace? (peek-char))
+  (let* ((fst (read-char))
+         (c (peek-char)))
+    (if (or (eof-object? c)
+            (char=? c #\()
+            (char=? c #\))
+            (char<=? c #\space)
+            (get-reader-macro c))
         (list fst)
         (cons fst (read-literal-char)))))
 
@@ -136,7 +148,7 @@
 
 (set-reader-macro #\[ (lambda (c) (read-delimited-list #\])))
 
-(set-reader-macro #\] (lambda (s c) (error "This character isn't meant to be read alone!")))
+(set-delimiter #\] )
 
 (pp (read))
 
