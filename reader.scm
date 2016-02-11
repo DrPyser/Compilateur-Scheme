@@ -2,20 +2,14 @@
 
 (define readtable (make-table))
 
-(define (set-reader-macro c f . t)
-  (if (null? t)
-      (table-set! readtable c f)
-      (table-set! (car t) c f)))
+(define (set-reader-macro c f #!optional (t readtable))
+  (table-set! t c f))
 
-(define (get-reader-macro c . t)
-  (if (null? t)
-      (table-ref readtable c #f)
-      (table-ref (car t) c #f)))
+(define (get-reader-macro c #!optional (t readtable))
+  (table-ref t c #f))
 
-(define (set-delimiter c . t)
-  (if (null? t)
-      (table-set! readtable c (lambda (c) (error "This character cannot be read alone")))
-      (table-set! (car t) c (lambda (c) (error "This character cannot be read alone")))))
+(define (set-delimiter c #!optional (t readtable))
+  (table-set! t c (lambda (c) (error "This character cannot be read alone"))))
 
 (define (read)
   (let* ((c (peek-char-non-whitespace))
@@ -23,22 +17,20 @@
     (cond ((eof-object? c)
            c)
           ((char=? #\. c) (error "Syntax error: wrong context for dot"))
-          ((char=? #\; c) (begin (read-line) (read)))
-          (readermacro (begin (read-char) (readermacro c)))
+          ((char=? #\; c) (begin (read-line) (read))) ;; discarding comment
+          (readermacro (begin (read-char) (readermacro c))) ;;calling reader-macro function
           ((char=? c #\()
            (read-char) ;; skip "("
             (read-list))
           ((char=? c #\#)
-           (read-char)
-           (if (char=? (peek-char) #\\)
-               (begin (read-char) (list->char (read-literal-char)))                              
+           (read-char) ;; skip "#"
+           (if (char=? (peek-char) #\\) 
+               (begin (read-char) (list->char (read-literal-char))) ;;character literal                               
                (let ((form (read)))
-                 (cond ((symbol? form)
-                        (case (read) 
-                          ((t) #t)
-                          ((f) #f)))
-                       ((list? form)
-                        (apply vector form))))))
+                 (cond ((symbol? form) (case form
+                                         ((t) #t)
+                                         ((f) #f)))
+                       ((list? form) (apply vector form))))))
           ((char=? c #\")
            (read-char)
            (list->string (read-string)))
@@ -46,7 +38,7 @@
            (read-char)
            `(quote ,(read)))
           (else
-           (read-char) ;; skip first char
+           (read-char) 
            (let ((s (list->string (cons c (read-symbol)))))
              (or (string->number s)
                  (string->symbol s)))))))
@@ -148,7 +140,7 @@
 
 (set-reader-macro #\[ (lambda (c) (read-delimited-list #\])))
 
-(set-delimiter #\] )
+(set-delimiter #\])
 
 (pp (read))
 
