@@ -1,4 +1,1 @@
-(if #t
-    (let ((a 15) (b 2) (c 4))          
-      (println (+ a b)))
-    (println #f))
+(println (modulo 25 3))
