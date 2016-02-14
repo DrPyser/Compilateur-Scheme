@@ -136,12 +136,5 @@
           (read-char)
           (peek-char-non-whitespace)))))
 
-;; try it...
-
-(set-reader-macro #\[ (lambda (c) (read-delimited-list #\])))
-
-(set-delimiter #\])
-
-(pp (read))
 
 
