@@ -54,91 +54,122 @@
 
 
 (define (comp-function name expr)   
-   (comp-expr expr 0 '((argc . 1))
-              (lambda (code fs cte)
-                (append (list* (vector 'label name)
-                               code)            
-                        (list (vector 'return))))))
-
+  (append (list* (vector 'label name)
+                 (comp-expr expr 0 '((argc . 1))))
+          (list (vector 'return))))
 
 (define-macro (inc var)
   `(set! ,var (+ ,var 1)))
 
+(define (multimap f l . ls)
+  (if (null? ls)
+      (map f l)
+      (if (null? l)
+          '()
+          (cons (apply f (map car (cons l ls)))
+                (apply multimap f (map cdr (cons l ls)))))))
+
+(define (range from to step)
+  (cond ((< step 0)
+         (if (<= from to)
+             '()
+             (cons from (range (+ step from) to step))))
+        ((> step 0)
+         (if (>= from to)
+             '()
+             (cons from (range (+ step from) to step))))))
+
+(define (mappend f l)
+  (apply append (map f l)))
+
 (define comp-expr
   (let ((if-counter 0))
-    (lambda (expr fs cte k) ;; fs = frame size
+    (lambda (expr fs cte) ;; fs = frame size
       ;; cte = compile time environment
-      ;; k = continuation
       (cond
        ;; handle this form: 123
        ((or (number? expr) (boolean? expr))
-        (k (list (vector 'push-constant expr)) fs cte))
+        (vector 'push-constant expr))
 
        ;; handle this form: var
        ((symbol? expr)
         (let ((x (assoc expr cte)))
           (if x
               (let ((index (cdr x)))
-                (k (list (vector 'push-local (+ fs index))) fs cte))
+                (vector 'push-local (+ fs index)))
               (error "undefined variable" expr))))
 
        ;; handle this form: (let ((var expr)) body)
        ((and (list? expr)
              (= (length expr) 3)
              (eq? (list-ref expr 0) 'let))
-        (let ((binding (list-ref (list-ref expr 1) 0)))          
-           (comp-expr (list-ref binding 1) fs cte
-                      (lambda (code1 fs cte)
-                        (comp-expr (list-ref expr 2)
-                                   (+ fs 1)                                   
-                                   (cons (cons (list-ref binding 0)
-                                               (- (+ fs 1)))
-                                         cte)
-                                   (lambda (code2 fs cte)
-                                     (k (append code1
-                                                code2
-                                                (list (vector 'xchg)
-                                                      (vector 'pop)))
-                                        fs
-                                        cte)))))))
+        (let ((bindings (list-ref expr 1)))
+          (append
+           (multimap (lambda (i binding)
+                       (comp-expr (cadr binding) (+ fs i) cte))
+                     (range 0 (length bindings) 1)
+                     bindings)
+           (comp-expr (list-ref expr 2)
+                      (+ (length bindings) fs)
+                      (append (multimap (lambda (i binding)
+                                          (cons (car binding) (- (+ fs i))))
+                                        (range 1 (+ 1 (length bindings)) 1)
+                                        bindings)
+                              cte))
+           (mappend (lambda (x) (list (vector 'xchg) (vector 'pop)))
+                    bindings))))
                         
        ;; handle these forms:
        ;;   (+ expr1 expr2)
        ;;   (- expr1 expr2)
        ;;   (* expr1 expr2)
-       ;;   (quotient expr1 expr2)
-       ;;   (modulo expr1 expr2)
+       ;;   (/ expr1 expr2)
        ((and (list? expr)
              (= (length expr) 3)
-             (member (list-ref expr 0) '(+ - * / quotient modulo)))
-        (comp-expr (list-ref expr 2) fs cte
-                   (lambda (code1 fs cte)
-                     (comp-expr (list-ref expr 1) (+ fs 1) cte
-                                (lambda (code2 fs cte)
-                                  (k (append code1 ;expr1
-                                             code2 ;expr2
-                                             (list (case (list-ref expr 0)
-                                                     ((+) (vector 'add))
-                                                     ((-) (vector 'sub))
-                                                     ((*) (vector 'mul))
-                                                     ((quotient /) (vector 'div))
-                                                     ((modulo) (vector 'mod)))))
-                                     fs
-                                     cte))))))
+             (member (list-ref expr 0) '(+ - * / modulo quotient)))
+        (list
+         (comp-expr (list-ref expr 1) fs cte)
+         (comp-expr (list-ref expr 2) (+ fs 1) cte)
+         (case (list-ref expr 0)
+           ((+) (vector 'add))
+           ((-) (vector 'sub))
+           ((*) (vector 'mul))
+           ((/) (vector 'div))
+           ((quotient) (vector 'div))
+           ((modulo) (vector 'mod)))))
+
+       ;; handle these forms:
+       ;; (= expr1 expr2)
+       ;; (< expr1 expr2)
+       ;; (<= expr1 expr2)
+       ;; (> expr1 expr2)
+       ;; (>= expr1 expr2)
+
+       ((and (list? expr)
+             (= (length expr) 3)
+             (member (list-ref expr 0) '(= < >)))
+        (list
+         (comp-expr (list-ref expr 2) fs cte)
+         (comp-expr (list-ref expr 1) (+ fs 1) cte)
+         (case (list-ref expr 0)
+           ((=) (vector 'num-eq))
+           ((>) (vector 'gt))
+           ((<) (vector 'lt))
+           ((>=) (vector 'gte))
+           ((<=) (vector 'lte)))))
 
        ;; handle these forms:
        ;;   (println expr)
        ((and (list? expr)
              (= (length expr) 2)
              (member (list-ref expr 0) '(println)))
-        (comp-expr (list-ref expr 1) fs cte
-                   (lambda (code fs cte)
-                     (k (append code ;expr
-                                (list (case (list-ref expr 0)
-                                        ((println) (vector 'println)))))
-                        fs cte))))
-                   
-       ;;handle (if test expr1 expr2)
+        (case (car expr)
+          ((println) (list
+                      (comp-expr (cadr expr) fs cte)
+                      (vector 'println)))))
+
+
+       ;;handle (if expr1 expr2 expr3)
        ((and (list? expr)
              (= (length expr) 4)
              (eq? (car expr) 'if))
@@ -149,24 +180,18 @@
               (false-label (string-append "if_false" (number->string if-counter)))
               (end-label (string-append "if_end" (number->string if-counter))))
           (inc if-counter)
-          (comp-expr test (+ fs 2) cte
-                     (lambda (code1 fs cte)                      
-                       (comp-expr true-expr fs cte
-                                  (lambda (code2 fs cte)                                    
-                                    (comp-expr false-expr fs cte
-                                               (lambda (code3 fs cte)
-                                                 (k (append (list* (vector 'push-address false-label)
-                                                                   (vector 'push-address true-label)
-                                                                   code1) ;code for "test". 
-                                                            (list* (vector 'if)
-                                                                   (vector 'label true-label)
-                                                                   code2) ;code for "true-expr"
-                                                            (list* (vector 'jump end-label) ;Skip the "false" block
-                                                                   (vector 'label false-label)
-                                                                   code3) ;code for "false-expr"
-                                                            (list (vector 'label end-label)))
-                                                    fs cte)))))))))
-                
+          (list
+           (vector 'push-address false-label)
+           (vector 'push-address true-label)
+           (comp-expr (list-ref expr 1) (+ fs 2) cte)
+           (vector 'if)
+           (vector 'label true-label)
+           (comp-expr (list-ref expr 2) (+ fs 3) cte)
+           (vector 'jump end-label)
+           (vector 'label false-label)
+           (comp-expr (list-ref expr 3) (+ fs 4) cte)
+           (vector 'label end-label))))
+       
        (else
         (begin (display expr)
                (error "comp-expr cannot handle expression")))))))

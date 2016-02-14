@@ -1,6 +1,4 @@
 
-CIR=./miniscm-ir.scm
-CAS=./ir-x86.scm
 GSC=gsc -exe
 RM=rm -f
 
@@ -15,8 +13,12 @@ miniscm-ir: source/miniscm-ir.scm lib/reader.scm
 ir-x86: source/ir-x86.scm lib/reader.scm
 	$(GSC) -o bin/ir-x86 source/ir-x86.scm lib/reader.scm
 
+
+test: tests/ex.scm
+	./miniscm.sh tests/ex.scm
+
 clean:
-	$(RM) bin/miniscm-ir bin/ir-x86 *.pdf *~ *.log 
+	$(RM) bin/miniscm-ir bin/ir-x86 tests/ex.ir tests/ex.s tests/ex *.pdf *~ *.log 
 
 .SUFFIXES: .md .pdf
 

@@ -1,5 +1,4 @@
 (if #t
-    (let ((a 15))
-      (let ((b 2))
-        (println (modulo a b))))
+    (let ((a 15) (b 2) (c 4))          
+      (println (+ a b)))
     (println #f))
