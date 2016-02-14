@@ -28,6 +28,11 @@
 ;; #(sub)                      pop values a and b from stack and push a-b
 ;; #(mul)                      pop values a and b from stack and push a*b
 ;; #(div)                      pop values a and b from stack and push a/b
+;; #(num-eq)                   pop values a and b from stack and push #t if (= a b), #f otherwise
+;; #(gt)                       pop values a and b from stack and push #t if (> a b), #f otherwise
+;; #(lt)                       pop values a and b from stack and push #t if (< a b), #f otherwise
+;; #(gte)                      pop values a and b from stack and push #t if (>= a b), #f otherwise
+;; #(lte)                      pop values a and b from stack and push #t if (<= a b), #f otherwise
 ;; #(println)                  print value at top of stack
 ;; #(xchg)                     pop values a and b from stack and push a then b
 ;; #(pop)                      pop a value from stack and discard it
